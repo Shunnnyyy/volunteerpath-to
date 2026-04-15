@@ -42,7 +42,7 @@ export default function HomePage() {
   const [majorFilter, setMajorFilter] = useState("All");
 
   useEffect(() => {
-    fetch("http://localhost:3000/api/opportunities")
+    fetch("/api/opportunities")
       .then((res) => res.json())
       .then((data) => setData(data));
   }, []);
