@@ -10,7 +10,7 @@ export async function fetchCityVolunteers() {
       bestFor: ["community", "leadership"],
       requirements: ["Age 14+", "Commitment required"],
       languages: ["English"],
-      link: "https://www.toronto.ca/community-people/get-involved/volunteer/",
+      link: "https://www.toronto.ca/explore-enjoy/recreation/volunteer/",
       source_type: "official",
       source_name: "city_of_toronto",
     },
