@@ -187,31 +187,46 @@ export default function HomePage() {
           )}
 
           {filteredOpportunities.map((item) => (
-            <article
-              key={item.slug}
-              className="rounded-3xl border border-slate-200 bg-white p-6"
-            >
-              <h4 className="text-2xl font-semibold">{item.title}</h4>
-              <p className="mt-1 text-sm text-slate-500">{item.organization}</p>
-
-              <div className="mt-5 space-y-4">
-                <InfoRow label="Duration" value={item.duration} />
-                <InfoRow label="Introduction" value={item.introduction} />
-                <InfoRow label="Summary" value={item.summary} />
-                <TagRow label="Best for" items={item.best_for ?? []} />
-                <TagRow label="Requirements" items={item.requirements ?? []} />
-                <TagRow label="Languages" items={item.languages ?? []} />
-              </div>
-
-              <a
-                href={item.link}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-6 inline-block rounded-2xl border border-slate-900 px-4 py-2 text-sm font-medium"
+              <article
+                  key={item.slug}
+                  className="rounded-3xl border border-slate-200 bg-white p-6"
               >
-                Official link
-              </a>
-            </article>
+                <h4 className="text-2xl font-semibold">{item.title}</h4>
+                <p className="mt-1 text-sm text-slate-500">{item.organization}</p>
+
+                <div className="mt-5 space-y-4">
+                  <InfoRow label="Duration" value={item.duration}/>
+                  <InfoRow label="Introduction" value={item.introduction}/>
+                  <InfoRow label="Summary" value={item.summary}/>
+                  <TagRow label="Best for" items={item.best_for ?? []}/>
+                  <TagRow label="Requirements" items={item.requirements ?? []}/>
+                  <TagRow label="Languages" items={item.languages ?? []}/>
+                </div>
+
+                <div className="mt-6 flex gap-2">
+                  {/* 原按钮 */}
+                  <a
+                      href={item.link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-block rounded-2xl border border-slate-900 px-4 py-2 text-sm font-medium"
+                  >
+                    Official link
+                  </a>
+
+                  {/* fallback */}
+                  <a
+                      href={`https://www.google.com/search?q=${encodeURIComponent(
+                          item.title + " " + item.organization
+                      )}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-block rounded-2xl border border-slate-300 px-4 py-2 text-sm text-gray-500"
+                  >
+                    Search
+                  </a>
+                </div>
+              </article>
           ))}
         </div>
       </section>
