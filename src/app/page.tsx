@@ -40,12 +40,24 @@ export default function HomePage() {
   const [search, setSearch] = useState("");
   const [organizationFilter, setOrganizationFilter] = useState("All");
   const [majorFilter, setMajorFilter] = useState("All");
+  const [views, setViews] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("/api/opportunities")
-      .then((res) => res.json())
-      .then((data) => setData(data));
-  }, []);
+  fetch("/api/opportunities")
+    .then((res) => res.json())
+    .then((data) => setData(data));
+
+  // 先 +1
+  fetch("/api/views", { method: "POST" })
+    .then(() => {
+      // 再获取最新值
+      fetch("/api/views")
+        .then((res) => res.json())
+        .then((result) => {
+          setViews(result.views);
+        });
+    });
+}, []);
 
   if (!data) {
     return <p className="p-6">Loading...</p>;
@@ -116,19 +128,20 @@ export default function HomePage() {
         <div className="mt-4 flex flex-wrap gap-4 text-sm text-slate-500">
           <span>Last updated: {data.lastUpdated}</span>
           <span>Source: {data.source}</span>
+          <span>Views: {views ?? "..."}</span>
         </div>
 
         <div className="mt-8 flex flex-wrap gap-3">
           <a
-            href="#opportunities"
-            className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-medium text-white"
+              href="#opportunities"
+              className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-medium text-white"
           >
             Explore opportunities
           </a>
 
           <a
-            href="#majors"
-            className="rounded-2xl border border-slate-300 px-5 py-3 text-sm font-medium text-slate-800"
+              href="#majors"
+              className="rounded-2xl border border-slate-300 px-5 py-3 text-sm font-medium text-slate-800"
           >
             Browse by major
           </a>
