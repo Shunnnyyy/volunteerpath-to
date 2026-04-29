@@ -1,4 +1,5 @@
-import { fetchCityVolunteers } from "@/lib/fetchCityVolunteers";
+import { fetchExtraVolunteers } from "@/lib/fetchExtraVolunteers";
+import { fetchMegaVolunteers } from "@/lib/fetchCityVolunteers";
 export const runtime = "nodejs";
 
 import { supabaseAdmin } from "@/lib/supabase";
@@ -17,9 +18,10 @@ export async function GET(request: Request) {
 
   try {
     const libraryData = await fetchTorontoLibraryVolunteerPage();
-    const cityData = await fetchCityVolunteers();
+    const megaData = await fetchMegaVolunteers();
+    const extraData = await fetchExtraVolunteers();
 
-    const data = [...libraryData, ...cityData];
+    const data = [...libraryData, ...megaData, ...extraData];
 
     for (const item of data) {
       const slug = item.title.toLowerCase().replace(/\s+/g, "-");
