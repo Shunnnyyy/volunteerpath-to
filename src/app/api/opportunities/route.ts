@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 
 import { majorTracks } from "@/data/volunteers";
+import { opportunities } from "@/data/volunteers";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
 type OpportunityRow = {
@@ -8,25 +9,42 @@ type OpportunityRow = {
 };
 
 export async function GET() {
-  const supabaseAdmin = getSupabaseAdmin();
-  const { data, error } = await supabaseAdmin
-    .from("volunteer_opportunities")
-    .select("*")
-    .eq("is_active", true)
-    .order("updated_at", { ascending: false })
-    .returns<OpportunityRow[]>();
+  let data: OpportunityRow[] | null = null;
 
-  if (error) {
+  try {
+    const supabaseAdmin = getSupabaseAdmin();
+    const result = await supabaseAdmin
+      .from("volunteer_opportunities")
+      .select("*")
+      .eq("is_active", true)
+      .order("updated_at", { ascending: false })
+      .returns<OpportunityRow[]>();
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    data = result.data;
+  } catch (error) {
     console.error(error);
+
+    const today = new Date().toISOString().split("T")[0];
 
     return Response.json(
       {
-        lastUpdated: new Date().toISOString().split("T")[0],
-        source: "database error",
-        opportunities: [],
+        lastUpdated: today,
+        source: "local fallback",
+        opportunities: opportunities.map((item) => ({
+          ...item,
+          slug: item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
+          source_type: "fallback",
+          source_name: "local",
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        })),
         majorTracks,
       },
-      { status: 500 }
+      { status: 200 }
     );
   }
 
