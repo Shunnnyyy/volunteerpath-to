@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# VolunteerPath TO
 
-## Getting Started
+VolunteerPath TO is a Next.js app that lists Toronto volunteer opportunities for
+high school students. The site reads opportunities from Supabase and refreshes
+them through a Vercel Cron-powered crawler.
+
+## Local Development
 
 First, run the development server:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Create a local `.env.local` before calling the API routes:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+CRON_SECRET=...
+```
 
-## Learn More
+## Automatic Crawler
 
-To learn more about Next.js, take a look at the following resources:
+The crawler lives in `src/lib/scrapeOpportunities.ts` and runs from
+`GET /api/sync`. It fetches official volunteer pages, normalizes each source into
+the app's opportunity shape, upserts rows into `volunteer_opportunities`, and
+marks stale scraped rows inactive.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Vercel runs the crawler every 6 hours from `vercel.json`:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```json
+{
+  "crons": [
+    {
+      "path": "/api/sync",
+      "schedule": "0 */6 * * *"
+    }
+  ]
+}
+```
 
-## Deploy on Vercel
+In production, `/api/sync` requires either:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `Authorization: Bearer $CRON_SECRET`
+- `/api/sync?secret=$CRON_SECRET` for a manual run
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Supabase Tables
+
+The app expects:
+
+- `volunteer_opportunities`: stores crawled volunteer opportunities.
+- `site_stats`: stores the homepage view counter row with key `homepage_views`.
+
+The current Supabase project is `volunteerpath-to`.

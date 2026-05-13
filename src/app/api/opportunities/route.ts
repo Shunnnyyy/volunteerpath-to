@@ -1,13 +1,20 @@
 export const runtime = "nodejs";
 
 import { majorTracks } from "@/data/volunteers";
-import { supabaseAdmin } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase";
+
+type OpportunityRow = {
+  updated_at: string;
+};
 
 export async function GET() {
+  const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
     .from("volunteer_opportunities")
     .select("*")
-    .order("updated_at", { ascending: false });
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .returns<OpportunityRow[]>();
 
   if (error) {
     console.error(error);

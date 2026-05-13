@@ -1,10 +1,11 @@
 export const runtime = "nodejs";
 
-import { supabaseAdmin } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
 // 👉 获取浏览数
 export async function GET() {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const { data, error } = await supabaseAdmin
       .from("site_stats")
       .select("value")
@@ -26,6 +27,7 @@ export async function GET() {
 // 👉 每访问一次 +1
 export async function POST() {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const { data: currentRow, error: readError } = await supabaseAdmin
       .from("site_stats")
       .select("value")

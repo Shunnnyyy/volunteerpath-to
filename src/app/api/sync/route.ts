@@ -1,58 +1,129 @@
-import { fetchExtraVolunteers } from "@/lib/fetchExtraVolunteers";
-import { fetchMegaVolunteers } from "@/lib/fetchCityVolunteers";
 export const runtime = "nodejs";
 
-import { supabaseAdmin } from "@/lib/supabase";
-import { fetchTorontoLibraryVolunteerPage } from "@/lib/fetchVolunteers";
+import { scrapeVolunteerOpportunities } from "@/lib/scrapeOpportunities";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const secret = url.searchParams.get("secret");
+  const manualSecret = url.searchParams.get("secret");
+  const authHeader = request.headers.get("authorization");
+  const cronSecret = process.env.CRON_SECRET;
+  const isLocalDev = process.env.NODE_ENV !== "production";
 
-  // 允许两种情况：
-  // 1. 手动访问 /api/sync?secret=...
-  // 2. Vercel cron 直接访问 /api/sync
-  if (secret && secret !== process.env.CRON_SECRET) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isLocalDev) {
+    if (!cronSecret) {
+      return Response.json({ error: "CRON_SECRET is not configured" }, { status: 500 });
+    }
+
+    const isAuthorized =
+      authHeader === `Bearer ${cronSecret}` || manualSecret === cronSecret;
+
+    if (!isAuthorized) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   try {
-    const libraryData = await fetchTorontoLibraryVolunteerPage();
-    const megaData = await fetchMegaVolunteers();
-    const extraData = await fetchExtraVolunteers();
+    const startedAt = new Date().toISOString();
+    const supabaseAdmin = getSupabaseAdmin();
+    const { opportunities, errors } = await scrapeVolunteerOpportunities();
 
-    const data = [...libraryData, ...megaData, ...extraData];
+    const rows = opportunities.map((item) => {
+      const slug = slugify(`${item.organization}-${item.title}`);
 
-    for (const item of data) {
-      const slug = item.title.toLowerCase().replace(/\s+/g, "-");
+      return {
+        slug,
+        title: item.title,
+        organization: item.organization,
+        duration: item.duration,
+        introduction: item.introduction,
+        summary: item.summary,
+        best_for: item.bestFor ?? [],
+        requirements: item.requirements ?? [],
+        languages: item.languages ?? [],
+        link: item.link,
+        source_type: "scraped",
+        source_name: item.sourceName,
+        is_active: true,
+        last_checked_at: startedAt,
+        updated_at: startedAt,
+      };
+    });
 
-      await supabaseAdmin
-        .from("volunteer_opportunities")
-        .upsert(
-          {
-            slug,
-            title: item.title,
-            organization: item.organization,
-            duration: item.duration,
-            introduction: item.introduction,
-            summary: item.summary,
-            best_for: item.bestFor ?? [],
-            requirements: item.requirements ?? [],
-            languages: item.languages ?? [],
-            link: item.link,
-            source_type: "scraped",
-            source_name: "toronto_public_library",
-            is_active: true,
-            last_checked_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "slug" }
-        );
+    const { error: upsertError } = await supabaseAdmin
+      .from("volunteer_opportunities")
+      .upsert(rows, { onConflict: "slug" });
+
+    if (upsertError) {
+      throw upsertError;
     }
 
-    return Response.json({ success: true });
+    if (rows.length > 0) {
+      const activeSlugSet = new Set(rows.map((row) => row.slug));
+      const { data: existingRows, error: existingRowsError } = await supabaseAdmin
+        .from("volunteer_opportunities")
+        .select("slug")
+        .eq("source_type", "scraped")
+        .eq("is_active", true);
+
+      if (existingRowsError) {
+        throw existingRowsError;
+      }
+
+      const staleSlugs =
+        existingRows?.map((row) => row.slug).filter((slug) => !activeSlugSet.has(slug)) ?? [];
+
+      if (staleSlugs.length === 0) {
+        return Response.json({
+          success: true,
+          checkedAt: startedAt,
+          upserted: rows.length,
+          deactivated: 0,
+          warnings: errors,
+        });
+      }
+
+      const { error: deactivateError } = await supabaseAdmin
+        .from("volunteer_opportunities")
+        .update({
+          is_active: false,
+          last_checked_at: startedAt,
+          updated_at: startedAt,
+        })
+        .in("slug", staleSlugs);
+
+      if (deactivateError) {
+        throw deactivateError;
+      }
+
+      return Response.json({
+        success: true,
+        checkedAt: startedAt,
+        upserted: rows.length,
+        deactivated: staleSlugs.length,
+        warnings: errors,
+      });
+    }
+
+    return Response.json({
+      success: true,
+      checkedAt: startedAt,
+      upserted: rows.length,
+      deactivated: 0,
+      warnings: errors,
+    });
   } catch (err) {
     console.error(err);
-    return Response.json({ error: "sync failed" }, { status: 500 });
+    const message = err instanceof Error ? err.message : "sync failed";
+    return Response.json({ error: message }, { status: 500 });
   }
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 140);
 }
