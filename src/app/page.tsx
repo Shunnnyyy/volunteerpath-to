@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+type Lang = "en" | "zh";
+type TrackerStatus = "none" | "saved" | "planning" | "applied" | "completed";
+
 type Opportunity = {
   id?: number;
   slug: string;
@@ -52,11 +55,20 @@ type FilterState = {
   language: string;
 };
 
+type TrackerEntry = {
+  status: TrackerStatus;
+  hours: number;
+};
+
+type TrackerState = Record<string, TrackerEntry>;
+
 type ScoredOpportunity = Opportunity & {
   score: number;
   reasons: string[];
   badges: string[];
 };
+
+const trackerKey = "volunteerpath-progress-v1";
 
 const initialQuiz: QuizState = {
   grade: "10",
@@ -75,40 +87,173 @@ const initialFilters: FilterState = {
   language: "All",
 };
 
-const interests = [
-  { value: "community", label: "Community" },
-  { value: "health", label: "Health" },
-  { value: "education", label: "Education" },
-  { value: "environment", label: "Environment" },
-  { value: "animals", label: "Animals" },
-  { value: "leadership", label: "Leadership" },
-  { value: "stem", label: "STEM" },
-  { value: "events", label: "Events" },
-];
+const copy = {
+  en: {
+    subtitle: "Toronto volunteer matching for high school students",
+    navMatch: "Match",
+    navTracker: "Tracker",
+    navOpportunities: "Opportunities",
+    active: "active opportunities",
+    headline: "Build a volunteer plan that fits this semester.",
+    intro:
+      "Answer a few student details, compare the best matches, and track every application from saved to completed hours.",
+    updated: "Updated",
+    source: "Source",
+    views: "Views",
+    quiz: "Student match",
+    quizHint: "Change the profile and the recommendations update instantly.",
+    grade: "Grade",
+    interest: "Interest",
+    availability: "Availability",
+    goal: "Goal",
+    location: "Location",
+    recommendations: "Recommended now",
+    recommendationsHint: "Ranked by fit, requirements, and likely application value.",
+    tracker: "Application tracker",
+    saved: "Saved",
+    planning: "Planning",
+    applied: "Applied",
+    completed: "Completed",
+    hours: "Hours",
+    completedHours: "Completed hours",
+    filters: "Smart filters",
+    results: "results",
+    reset: "Reset",
+    search: "Search",
+    organization: "Organization",
+    major: "Major direction",
+    age: "Age fit",
+    requirements: "Requirements",
+    language: "Language",
+    bestFor: "Best for",
+    detectedFit: "Detected fit",
+    lastChecked: "Last checked",
+    official: "Official link",
+    google: "Search",
+    empty: "No opportunities match this set yet.",
+    emptyHint: "Broaden the schedule, age, or requirement filters.",
+    majors: "Browse by major",
+    all: "All",
+    noRequirement: "Check official page",
+    savedAction: "Save",
+  },
+  zh: {
+    subtitle: "多伦多高中生义工匹配工具",
+    navMatch: "匹配",
+    navTracker: "进度",
+    navOpportunities: "机会",
+    active: "个可申请机会",
+    headline: "帮你做一份适合本学期的义工计划。",
+    intro:
+      "填写学生条件，查看推荐机会，并把每个申请从收藏、准备、已申请一直追踪到完成小时数。",
+    updated: "更新",
+    source: "来源",
+    views: "浏览",
+    quiz: "学生匹配",
+    quizHint: "修改条件后，推荐结果会马上更新。",
+    grade: "年级",
+    interest: "兴趣",
+    availability: "时间",
+    goal: "目标",
+    location: "地点",
+    recommendations: "当前推荐",
+    recommendationsHint: "根据匹配度、要求和申请价值排序。",
+    tracker: "申请进度",
+    saved: "已收藏",
+    planning: "准备申请",
+    applied: "已申请",
+    completed: "已完成",
+    hours: "小时",
+    completedHours: "完成小时数",
+    filters: "精细筛选",
+    results: "个结果",
+    reset: "重置",
+    search: "搜索",
+    organization: "机构",
+    major: "专业方向",
+    age: "年龄",
+    requirements: "要求",
+    language: "语言",
+    bestFor: "适合",
+    detectedFit: "系统判断",
+    lastChecked: "上次检查",
+    official: "官网链接",
+    google: "搜索",
+    empty: "暂时没有符合条件的机会。",
+    emptyHint: "可以放宽时间、年龄或要求筛选。",
+    majors: "按专业方向浏览",
+    all: "全部",
+    noRequirement: "查看官网",
+    savedAction: "收藏",
+  },
+};
 
-const availabilityOptions = [
-  { value: "All", label: "Any schedule" },
-  { value: "weekend", label: "Weekend" },
-  { value: "summer", label: "Summer" },
-  { value: "weekly", label: "Weekly" },
-  { value: "remote", label: "Remote" },
-  { value: "flexible", label: "Flexible" },
-];
-
-const ageOptions = [
-  { value: "All", label: "Any age" },
-  { value: "14", label: "14+" },
-  { value: "15", label: "15+" },
-  { value: "16", label: "16+" },
-];
+const optionLabels = {
+  interests: {
+    community: { en: "Community", zh: "社区服务" },
+    health: { en: "Health", zh: "健康医疗" },
+    education: { en: "Education", zh: "教育" },
+    environment: { en: "Environment", zh: "环境" },
+    animals: { en: "Animals", zh: "动物" },
+    leadership: { en: "Leadership", zh: "领导力" },
+    stem: { en: "STEM", zh: "理工科" },
+    events: { en: "Events", zh: "活动" },
+  },
+  availability: {
+    All: { en: "Any schedule", zh: "不限时间" },
+    flexible: { en: "Flexible", zh: "灵活" },
+    weekend: { en: "Weekend", zh: "周末" },
+    summer: { en: "Summer", zh: "暑假" },
+    weekly: { en: "Weekly", zh: "每周" },
+    remote: { en: "Remote", zh: "线上" },
+  },
+  goals: {
+    hours: { en: "Get volunteer hours", zh: "拿义工小时" },
+    career: { en: "Explore a career field", zh: "探索专业方向" },
+    leadership: { en: "Build leadership", zh: "提升领导力" },
+    application: { en: "Strengthen applications", zh: "增强申请背景" },
+  },
+  locations: {
+    any: { en: "Anywhere in Toronto", zh: "多伦多不限" },
+    remote: { en: "Remote preferred", zh: "优先线上" },
+    "in-person": { en: "In-person preferred", zh: "优先线下" },
+  },
+  requirements: {
+    All: { en: "Any requirement", zh: "不限要求" },
+    low: { en: "Low barrier", zh: "低门槛" },
+    training: { en: "Training okay", zh: "可接受培训" },
+    screening: { en: "Screening okay", zh: "可接受筛查" },
+  },
+  tracker: {
+    none: { en: "Not tracking", zh: "未追踪" },
+    saved: { en: "Saved", zh: "已收藏" },
+    planning: { en: "Planning", zh: "准备申请" },
+    applied: { en: "Applied", zh: "已申请" },
+    completed: { en: "Completed", zh: "已完成" },
+  },
+};
 
 export default function HomePage() {
   const [data, setData] = useState<ApiData | null>(null);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<FilterState>(initialFilters);
   const [quiz, setQuiz] = useState<QuizState>(initialQuiz);
-  const [showRecommendations, setShowRecommendations] = useState(true);
+  const [tracker, setTracker] = useState<TrackerState>(() => {
+    if (typeof window === "undefined") {
+      return {};
+    }
+
+    try {
+      const stored = window.localStorage.getItem(trackerKey);
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [lang, setLang] = useState<Lang>("en");
   const [views, setViews] = useState<number | null>(null);
+
+  const t = copy[lang];
 
   useEffect(() => {
     fetch("/api/opportunities")
@@ -118,11 +263,14 @@ export default function HomePage() {
     fetch("/api/views", { method: "POST" }).then(() => {
       fetch("/api/views")
         .then((res) => res.json())
-        .then((result) => {
-          setViews(result.views);
-        });
+        .then((result) => setViews(result.views));
     });
+
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(trackerKey, JSON.stringify(tracker));
+  }, [tracker]);
 
   const enrichedOpportunities = useMemo(() => {
     if (!data) {
@@ -133,8 +281,8 @@ export default function HomePage() {
 
   if (!data) {
     return (
-      <main className="min-h-screen bg-stone-50 p-6 text-slate-900">
-        <p className="text-sm text-slate-600">Loading opportunities...</p>
+      <main className="min-h-screen bg-slate-950 p-6 text-white">
+        <p className="text-sm text-slate-300">Loading opportunities...</p>
       </main>
     );
   }
@@ -143,7 +291,6 @@ export default function HomePage() {
     "All",
     ...Array.from(new Set(data.opportunities.map((item) => item.organization))).sort(),
   ];
-
   const majorOptions = ["All", ...data.majorTracks.map((track) => track.title)];
   const languageOptions = [
     "All",
@@ -154,316 +301,320 @@ export default function HomePage() {
 
   const recommended = [...enrichedOpportunities]
     .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
-    .slice(0, 5);
+    .slice(0, 4);
 
   const filteredOpportunities = enrichedOpportunities
     .filter((item) => matchesFilters(item, search, filters))
-    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
+    .sort((a, b) => getStatusWeight(tracker[b.slug]?.status) - getStatusWeight(tracker[a.slug]?.status) || b.score - a.score);
 
-  const activeFilterCount = [
-    filters.organization !== "All",
-    filters.major !== "All",
-    filters.availability !== "All",
-    filters.age !== "All",
-    filters.requirement !== "All",
-    filters.language !== "All",
-    search.trim().length > 0,
-  ].filter(Boolean).length;
+  const trackerStats = getTrackerStats(tracker);
+
+  const updateTracker = (slug: string, next: Partial<TrackerEntry>) => {
+    setTracker((current) => {
+      const existing = current[slug] ?? { status: "none", hours: 0 };
+      const merged = { ...existing, ...next };
+      if (merged.status === "none" && merged.hours === 0) {
+        const rest = { ...current };
+        delete rest[slug];
+        return rest;
+      }
+      return { ...current, [slug]: merged };
+    });
+  };
 
   return (
-    <main className="min-h-screen bg-stone-50 text-slate-950">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between">
+    <main className="min-h-screen bg-slate-100 text-slate-950">
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-5 py-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-xl font-semibold">VolunteerPath TO</h1>
-            <p className="text-sm text-slate-500">
-              Toronto volunteer matching for high school students
-            </p>
+            <p className="text-sm text-slate-500">{t.subtitle}</p>
           </div>
 
-          <nav className="flex gap-5 text-sm text-slate-600">
-            <a href="#match">Match</a>
-            <a href="#opportunities">Opportunities</a>
-            <a href="#majors">Majors</a>
-          </nav>
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <nav className="flex gap-4 text-slate-600">
+              <a href="#match">{t.navMatch}</a>
+              <a href="#tracker">{t.navTracker}</a>
+              <a href="#opportunities">{t.navOpportunities}</a>
+            </nav>
+            <div className="rounded-md border border-slate-300 bg-white p-1">
+              <button
+                type="button"
+                onClick={() => setLang("en")}
+                className={`rounded px-2 py-1 ${lang === "en" ? "bg-slate-900 text-white" : "text-slate-600"}`}
+              >
+                EN
+              </button>
+              <button
+                type="button"
+                onClick={() => setLang("zh")}
+                className={`rounded px-2 py-1 ${lang === "zh" ? "bg-slate-900 text-white" : "text-slate-600"}`}
+              >
+                中文
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto grid max-w-7xl gap-6 px-5 py-8 lg:grid-cols-[1fr_360px]">
-          <div>
-            <p className="text-sm font-medium text-teal-700">
-              {data.opportunities.length} active opportunities
-            </p>
-            <h2 className="mt-3 max-w-3xl text-4xl font-semibold leading-tight">
-              Find the volunteer option that actually fits your schedule,
-              interests, and application goals.
-            </h2>
-            <div className="mt-5 flex flex-wrap gap-3 text-sm text-slate-500">
-              <span>Last updated: {data.lastUpdated}</span>
-              <span>Source: {data.source}</span>
-              <span>Views: {views ?? "..."}</span>
+      <section id="match" className="bg-slate-950 text-white">
+        <div className="mx-auto grid max-w-7xl gap-5 px-5 py-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="flex flex-col justify-between rounded-lg border border-white/10 bg-white/5 p-5">
+            <div>
+              <p className="text-sm font-medium text-teal-300">
+                {data.opportunities.length} {t.active}
+              </p>
+              <h2 className="mt-3 max-w-2xl text-4xl font-semibold leading-tight md:text-5xl">
+                {t.headline}
+              </h2>
+              <p className="mt-4 max-w-2xl text-base text-slate-300">{t.intro}</p>
+            </div>
+
+            <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <Metric label={t.recommendations} value={recommended.length} dark />
+              <Metric label={t.saved} value={trackerStats.saved} dark />
+              <Metric label={t.applied} value={trackerStats.applied} dark />
+              <Metric label={t.completedHours} value={trackerStats.hours} dark />
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <Metric label="Recommended" value={recommended.length.toString()} />
-            <Metric label="Sources" value={organizations.length - 1} />
-            <Metric label="Filters" value={activeFilterCount.toString()} />
-          </div>
-        </div>
-      </section>
-
-      <section id="match" className="mx-auto max-w-7xl px-5 py-8">
-        <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-          <aside className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="rounded-lg bg-white p-5 text-slate-950 shadow-2xl shadow-slate-950/20">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-semibold">Student match quiz</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Tune the list around current student needs.
-                </p>
+                <h3 className="text-lg font-semibold">{t.quiz}</h3>
+                <p className="mt-1 text-sm text-slate-500">{t.quizHint}</p>
               </div>
-              <label className="flex items-center gap-2 text-sm text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={showRecommendations}
-                  onChange={(event) => setShowRecommendations(event.target.checked)}
-                  className="h-4 w-4"
-                />
-                Show
-              </label>
+              <span className="rounded-md bg-teal-50 px-2 py-1 text-xs font-medium text-teal-800">
+                Live match
+              </span>
             </div>
 
-            <div className="mt-5 grid gap-4">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <SelectField
-                label="Grade"
+                label={t.grade}
                 value={quiz.grade}
                 onChange={(value) => setQuiz((current) => ({ ...current, grade: value }))}
-                options={[
-                  { value: "9", label: "Grade 9" },
-                  { value: "10", label: "Grade 10" },
-                  { value: "11", label: "Grade 11" },
-                  { value: "12", label: "Grade 12" },
-                ]}
+                options={["9", "10", "11", "12"].map((grade) => ({
+                  value: grade,
+                  label: lang === "en" ? `Grade ${grade}` : `${grade} 年级`,
+                }))}
               />
-
               <SelectField
-                label="Main interest"
+                label={t.interest}
                 value={quiz.interest}
                 onChange={(value) => setQuiz((current) => ({ ...current, interest: value }))}
-                options={interests}
+                options={toOptions(optionLabels.interests, lang)}
               />
-
               <SelectField
-                label="Available time"
+                label={t.availability}
                 value={quiz.availability}
-                onChange={(value) =>
-                  setQuiz((current) => ({ ...current, availability: value }))
-                }
-                options={[
-                  { value: "flexible", label: "Flexible" },
-                  { value: "weekend", label: "Weekend" },
-                  { value: "summer", label: "Summer" },
-                  { value: "weekly", label: "Weekly" },
-                  { value: "remote", label: "Remote" },
-                ]}
+                onChange={(value) => setQuiz((current) => ({ ...current, availability: value }))}
+                options={toOptions(optionLabels.availability, lang).filter((item) => item.value !== "All")}
               />
-
               <SelectField
-                label="Current goal"
+                label={t.goal}
                 value={quiz.goal}
                 onChange={(value) => setQuiz((current) => ({ ...current, goal: value }))}
-                options={[
-                  { value: "hours", label: "Get volunteer hours" },
-                  { value: "career", label: "Explore a career field" },
-                  { value: "leadership", label: "Build leadership" },
-                  { value: "application", label: "Strengthen applications" },
-                ]}
+                options={toOptions(optionLabels.goals, lang)}
               />
-
-              <SelectField
-                label="Location"
-                value={quiz.location}
-                onChange={(value) =>
-                  setQuiz((current) => ({ ...current, location: value }))
-                }
-                options={[
-                  { value: "any", label: "Anywhere in Toronto" },
-                  { value: "remote", label: "Remote preferred" },
-                  { value: "in-person", label: "In-person preferred" },
-                ]}
-              />
+              <div className="sm:col-span-2">
+                <SelectField
+                  label={t.location}
+                  value={quiz.location}
+                  onChange={(value) => setQuiz((current) => ({ ...current, location: value }))}
+                  options={toOptions(optionLabels.locations, lang)}
+                />
+              </div>
             </div>
-          </aside>
-
-          <div className="grid gap-4">
-            {showRecommendations && (
-              <section className="rounded-lg border border-slate-200 bg-white p-5">
-                <div className="mb-4 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold">Best matches</h3>
-                    <p className="text-sm text-slate-500">
-                      Ranked by interest, schedule, age fit, and application value.
-                    </p>
-                  </div>
-                  <a href="#opportunities" className="text-sm font-medium text-teal-700">
-                    View all filtered results
-                  </a>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {recommended.map((item) => (
-                    <RecommendationCard key={item.slug} item={item} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            <section
-              id="opportunities"
-              className="rounded-lg border border-slate-200 bg-white p-5"
-            >
-              <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold">Opportunity filters</h3>
-                  <p className="text-sm text-slate-500">
-                    {filteredOpportunities.length} result
-                    {filteredOpportunities.length === 1 ? "" : "s"} match the current filters.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch("");
-                    setFilters(initialFilters);
-                  }}
-                  className="w-fit rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
-                >
-                  Reset filters
-                </button>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <label className="grid gap-1 text-sm">
-                  <span className="font-medium text-slate-700">Search</span>
-                  <input
-                    type="text"
-                    placeholder="Try health, animals, weekend..."
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    className="rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-teal-600"
-                  />
-                </label>
-
-                <SelectField
-                  label="Organization"
-                  value={filters.organization}
-                  onChange={(value) =>
-                    setFilters((current) => ({ ...current, organization: value }))
-                  }
-                  options={organizations.map((organization) => ({
-                    value: organization,
-                    label: organization,
-                  }))}
-                />
-
-                <SelectField
-                  label="Major direction"
-                  value={filters.major}
-                  onChange={(value) => setFilters((current) => ({ ...current, major: value }))}
-                  options={majorOptions.map((major) => ({ value: major, label: major }))}
-                />
-
-                <SelectField
-                  label="Availability"
-                  value={filters.availability}
-                  onChange={(value) =>
-                    setFilters((current) => ({ ...current, availability: value }))
-                  }
-                  options={availabilityOptions}
-                />
-
-                <SelectField
-                  label="Age fit"
-                  value={filters.age}
-                  onChange={(value) => setFilters((current) => ({ ...current, age: value }))}
-                  options={ageOptions}
-                />
-
-                <SelectField
-                  label="Requirements"
-                  value={filters.requirement}
-                  onChange={(value) =>
-                    setFilters((current) => ({ ...current, requirement: value }))
-                  }
-                  options={[
-                    { value: "All", label: "Any requirement" },
-                    { value: "low", label: "Low barrier" },
-                    { value: "training", label: "Training okay" },
-                    { value: "screening", label: "Screening okay" },
-                  ]}
-                />
-
-                <SelectField
-                  label="Language"
-                  value={filters.language}
-                  onChange={(value) =>
-                    setFilters((current) => ({ ...current, language: value }))
-                  }
-                  options={languageOptions.map((language) => ({
-                    value: language,
-                    label: language,
-                  }))}
-                />
-              </div>
-
-              <div className="mt-6 grid gap-4">
-                {filteredOpportunities.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-slate-300 bg-stone-50 p-8 text-center">
-                    <p className="text-base font-medium text-slate-700">
-                      No opportunities match this set yet.
-                    </p>
-                    <p className="mt-2 text-sm text-slate-500">
-                      Broaden the schedule, age, or requirement filters.
-                    </p>
-                  </div>
-                )}
-
-                {filteredOpportunities.map((item) => (
-                  <OpportunityCard key={item.slug} item={item} />
-                ))}
-              </div>
-            </section>
           </div>
         </div>
       </section>
 
-      <section id="majors" className="mx-auto max-w-7xl px-5 pb-12">
-        <h3 className="mb-4 text-lg font-semibold">Browse by major</h3>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          {data.majorTracks.map((track) => (
-            <div
-              key={track.title}
-              className="rounded-lg border border-slate-200 bg-white p-5"
-            >
-              <h4 className="text-base font-semibold">{track.title}</h4>
-              <p className="mt-2 text-sm text-slate-600">{track.majors}</p>
-              <p className="mt-3 text-sm text-slate-700">{track.note}</p>
+      <section className="mx-auto grid max-w-7xl gap-5 px-5 py-5 lg:grid-cols-[1fr_360px]">
+        <div className="grid gap-5">
+          <section className="rounded-lg border border-slate-200 bg-white p-5">
+            <div className="mb-4 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">{t.recommendations}</h3>
+                <p className="text-sm text-slate-500">{t.recommendationsHint}</p>
+              </div>
+              <div className="text-sm text-slate-500">
+                {t.updated}: {data.lastUpdated} · {t.views}: {views ?? "..."}
+              </div>
             </div>
-          ))}
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {recommended.map((item) => (
+                <RecommendationCard
+                  key={item.slug}
+                  item={item}
+                  lang={lang}
+                  tracker={tracker[item.slug]}
+                  updateTracker={updateTracker}
+                />
+              ))}
+            </div>
+          </section>
+
+          <section
+            id="opportunities"
+            className="rounded-lg border border-slate-200 bg-white p-5"
+          >
+            <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">{t.filters}</h3>
+                <p className="text-sm text-slate-500">
+                  {filteredOpportunities.length} {t.results}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setFilters(initialFilters);
+                }}
+                className="w-fit rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+              >
+                {t.reset}
+              </button>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <label className="grid gap-1 text-sm">
+                <span className="font-medium text-slate-700">{t.search}</span>
+                <input
+                  type="text"
+                  placeholder="health, animals, weekend"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  className="rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-teal-600"
+                />
+              </label>
+              <SelectField
+                label={t.organization}
+                value={filters.organization}
+                onChange={(value) => setFilters((current) => ({ ...current, organization: value }))}
+                options={organizations.map((organization) => ({
+                  value: organization,
+                  label: organization === "All" ? t.all : organization,
+                }))}
+              />
+              <SelectField
+                label={t.major}
+                value={filters.major}
+                onChange={(value) => setFilters((current) => ({ ...current, major: value }))}
+                options={majorOptions.map((major) => ({
+                  value: major,
+                  label: major === "All" ? t.all : major,
+                }))}
+              />
+              <SelectField
+                label={t.availability}
+                value={filters.availability}
+                onChange={(value) => setFilters((current) => ({ ...current, availability: value }))}
+                options={toOptions(optionLabels.availability, lang)}
+              />
+              <SelectField
+                label={t.age}
+                value={filters.age}
+                onChange={(value) => setFilters((current) => ({ ...current, age: value }))}
+                options={[
+                  { value: "All", label: t.all },
+                  { value: "14", label: "14+" },
+                  { value: "15", label: "15+" },
+                  { value: "16", label: "16+" },
+                ]}
+              />
+              <SelectField
+                label={t.requirements}
+                value={filters.requirement}
+                onChange={(value) => setFilters((current) => ({ ...current, requirement: value }))}
+                options={toOptions(optionLabels.requirements, lang)}
+              />
+              <SelectField
+                label={t.language}
+                value={filters.language}
+                onChange={(value) => setFilters((current) => ({ ...current, language: value }))}
+                options={languageOptions.map((language) => ({
+                  value: language,
+                  label: language === "All" ? t.all : language,
+                }))}
+              />
+            </div>
+
+            <div className="mt-5 grid gap-3">
+              {filteredOpportunities.length === 0 && (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+                  <p className="font-medium text-slate-700">{t.empty}</p>
+                  <p className="mt-2 text-sm text-slate-500">{t.emptyHint}</p>
+                </div>
+              )}
+
+              {filteredOpportunities.map((item) => (
+                <OpportunityCard
+                  key={item.slug}
+                  item={item}
+                  lang={lang}
+                  tracker={tracker[item.slug]}
+                  updateTracker={updateTracker}
+                />
+              ))}
+            </div>
+          </section>
         </div>
+
+        <aside id="tracker" className="grid h-fit gap-5">
+          <section className="rounded-lg border border-slate-200 bg-white p-5">
+            <h3 className="text-lg font-semibold">{t.tracker}</h3>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <Metric label={t.saved} value={trackerStats.saved} />
+              <Metric label={t.planning} value={trackerStats.planning} />
+              <Metric label={t.applied} value={trackerStats.applied} />
+              <Metric label={t.completed} value={trackerStats.completed} />
+            </div>
+            <div className="mt-3 rounded-lg bg-teal-50 p-4">
+              <p className="text-2xl font-semibold text-teal-900">{trackerStats.hours}</p>
+              <p className="text-sm text-teal-800">{t.completedHours}</p>
+            </div>
+          </section>
+
+          <section id="majors" className="rounded-lg border border-slate-200 bg-white p-5">
+            <h3 className="text-lg font-semibold">{t.majors}</h3>
+            <div className="mt-4 grid gap-3">
+              {data.majorTracks.map((track) => (
+                <div key={track.title} className="rounded-md border border-slate-200 p-3">
+                  <h4 className="text-sm font-semibold">{track.title}</h4>
+                  <p className="mt-1 text-xs text-slate-500">{track.majors}</p>
+                  <p className="mt-2 text-sm text-slate-700">{track.note}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </aside>
       </section>
     </main>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string | number }) {
+function Metric({
+  label,
+  value,
+  dark = false,
+}: {
+  label: string;
+  value: string | number;
+  dark?: boolean;
+}) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-stone-50 p-4">
+    <div
+      className={`rounded-lg border p-3 ${
+        dark ? "border-white/10 bg-white/10" : "border-slate-200 bg-slate-50"
+      }`}
+    >
       <p className="text-2xl font-semibold">{value}</p>
-      <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">{label}</p>
+      <p className={`mt-1 text-xs ${dark ? "text-slate-300" : "text-slate-500"}`}>
+        {label}
+      </p>
     </div>
   );
 }
@@ -485,7 +636,7 @@ function SelectField({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600"
+        className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-teal-600"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -497,72 +648,108 @@ function SelectField({
   );
 }
 
-function RecommendationCard({ item }: { item: ScoredOpportunity }) {
+function RecommendationCard({
+  item,
+  lang,
+  tracker,
+  updateTracker,
+}: {
+  item: ScoredOpportunity;
+  lang: Lang;
+  tracker?: TrackerEntry;
+  updateTracker: (slug: string, next: Partial<TrackerEntry>) => void;
+}) {
   return (
-    <article className="rounded-lg border border-slate-200 bg-stone-50 p-4">
+    <article className="flex min-h-[220px] flex-col rounded-lg border border-slate-200 bg-slate-50 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h4 className="font-semibold leading-snug">{item.title}</h4>
-          <p className="mt-1 text-sm text-slate-500">{item.organization}</p>
+          <h4 className="text-sm font-semibold leading-snug">{item.title}</h4>
+          <p className="mt-1 text-xs text-slate-500">{item.organization}</p>
         </div>
         <span className="rounded-md bg-teal-700 px-2 py-1 text-xs font-semibold text-white">
           {item.score}
         </span>
       </div>
-      <p className="mt-3 text-sm text-slate-700">{item.summary}</p>
-      <TagList items={item.reasons.slice(0, 3)} tone="teal" />
-      <a
-        href={item.link}
-        target="_blank"
-        rel="noreferrer"
-        className="mt-4 inline-flex rounded-md border border-slate-900 px-3 py-2 text-sm font-medium"
-      >
-        Official link
-      </a>
+      <p className="mt-3 line-clamp-3 text-sm text-slate-700">{item.summary}</p>
+      <TagList items={item.reasons.slice(0, 2)} tone="teal" />
+      <div className="mt-auto flex items-center justify-between gap-2 pt-4">
+        <TrackerControl
+          slug={item.slug}
+          tracker={tracker}
+          updateTracker={updateTracker}
+          lang={lang}
+          compact
+        />
+        <a
+          href={item.link}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-md border border-slate-900 px-3 py-2 text-xs font-medium"
+        >
+          {copy[lang].official}
+        </a>
+      </div>
     </article>
   );
 }
 
-function OpportunityCard({ item }: { item: ScoredOpportunity }) {
+function OpportunityCard({
+  item,
+  lang,
+  tracker,
+  updateTracker,
+}: {
+  item: ScoredOpportunity;
+  lang: Lang;
+  tracker?: TrackerEntry;
+  updateTracker: (slug: string, next: Partial<TrackerEntry>) => void;
+}) {
+  const t = copy[lang];
+
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-5">
-      <div className="grid gap-4 md:grid-cols-[1fr_180px]">
+    <article className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="grid gap-4 xl:grid-cols-[1fr_260px]">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h4 className="text-xl font-semibold">{item.title}</h4>
+            <h4 className="text-lg font-semibold">{item.title}</h4>
             <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
               Match {item.score}
             </span>
+            {tracker?.status && tracker.status !== "none" && (
+              <span className="rounded-md bg-teal-50 px-2 py-1 text-xs font-medium text-teal-800">
+                {optionLabels.tracker[tracker.status][lang]}
+              </span>
+            )}
           </div>
           <p className="mt-1 text-sm text-slate-500">{item.organization}</p>
-          <p className="mt-4 text-slate-700">{item.introduction}</p>
+          <p className="mt-3 max-w-3xl text-sm text-slate-700">{item.introduction}</p>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-stone-50 p-3">
-          <InfoRow label="Duration" value={item.duration} />
-          <div className="mt-3">
-            <InfoRow
-              label="Last checked"
-              value={formatDate(item.last_checked_at || item.updated_at)}
-            />
-          </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <TrackerControl
+            slug={item.slug}
+            tracker={tracker}
+            updateTracker={updateTracker}
+            lang={lang}
+          />
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-3">
-        <TagGroup label="Best for" items={item.best_for ?? []} />
-        <TagGroup label="Requirements" items={item.requirements ?? []} />
-        <TagGroup label="Detected fit" items={item.badges} />
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <InfoBlock label="Duration" value={item.duration} />
+        <InfoBlock label={t.lastChecked} value={formatDate(item.last_checked_at || item.updated_at)} />
+        <TagGroup label={t.requirements} items={item.requirements ?? []} fallback={t.noRequirement} />
+        <TagGroup label={t.detectedFit} items={item.badges} fallback={t.noRequirement} />
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         <a
           href={item.link}
           target="_blank"
           rel="noreferrer"
           className="rounded-md border border-slate-900 px-4 py-2 text-sm font-medium"
         >
-          Official link
+          {t.official}
         </a>
         <a
           href={`https://www.google.com/search?q=${encodeURIComponent(
@@ -572,27 +759,84 @@ function OpportunityCard({ item }: { item: ScoredOpportunity }) {
           rel="noreferrer"
           className="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-600"
         >
-          Search
+          {t.google}
         </a>
       </div>
     </article>
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function TrackerControl({
+  slug,
+  tracker,
+  updateTracker,
+  lang,
+  compact = false,
+}: {
+  slug: string;
+  tracker?: TrackerEntry;
+  updateTracker: (slug: string, next: Partial<TrackerEntry>) => void;
+  lang: Lang;
+  compact?: boolean;
+}) {
+  const entry = tracker ?? { status: "none", hours: 0 };
+
   return (
-    <div>
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+    <div className={compact ? "grid gap-2" : "grid gap-3"}>
+      <select
+        value={entry.status}
+        onChange={(event) =>
+          updateTracker(slug, { status: event.target.value as TrackerStatus })
+        }
+        className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs outline-none focus:border-teal-600"
+      >
+        {toOptions(optionLabels.tracker, lang).map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+
+      {!compact && (
+        <label className="grid gap-1 text-xs text-slate-600">
+          {copy[lang].completedHours}
+          <input
+            type="number"
+            min="0"
+            value={entry.hours}
+            onChange={(event) =>
+              updateTracker(slug, { hours: Number(event.target.value || 0) })
+            }
+            className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm outline-none focus:border-teal-600"
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+function InfoBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-slate-50 p-3">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
       <p className="mt-1 text-sm text-slate-800">{value}</p>
     </div>
   );
 }
 
-function TagGroup({ label, items = [] }: { label: string; items?: string[] }) {
+function TagGroup({
+  label,
+  items = [],
+  fallback,
+}: {
+  label: string;
+  items?: string[];
+  fallback: string;
+}) {
   return (
-    <div>
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <TagList items={items.length > 0 ? items : ["Check official page"]} />
+    <div className="rounded-md bg-slate-50 p-3">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <TagList items={items.length > 0 ? items : [fallback]} />
     </div>
   );
 }
@@ -610,9 +854,9 @@ function TagList({
       : "border-slate-200 bg-white text-slate-700";
 
   return (
-    <div className="mt-2 flex flex-wrap gap-2">
+    <div className="mt-2 flex flex-wrap gap-1.5">
       {items.map((item) => (
-        <span key={item} className={`rounded-md border px-2 py-1 text-xs ${classes}`}>
+        <span key={item} className={`rounded border px-2 py-1 text-xs ${classes}`}>
           {item}
         </span>
       ))}
@@ -790,8 +1034,10 @@ function hasApplicationValue(text: string) {
 }
 
 function isLowBarrier(text: string) {
-  return hasAny(text, ["none", "eligibility varies", "check official page"]) &&
-    !hasAny(text, ["screening", "training", "police"]);
+  return (
+    hasAny(text, ["none", "eligibility varies", "check official page"]) &&
+    !hasAny(text, ["screening", "training", "police"])
+  );
 }
 
 function hasAny(text: string, terms: string[]) {
@@ -804,4 +1050,36 @@ function formatDate(value?: string) {
   }
 
   return new Date(value).toISOString().split("T")[0];
+}
+
+function getTrackerStats(tracker: TrackerState) {
+  return Object.values(tracker).reduce(
+    (stats, entry) => {
+      if (entry.status === "saved") stats.saved += 1;
+      if (entry.status === "planning") stats.planning += 1;
+      if (entry.status === "applied") stats.applied += 1;
+      if (entry.status === "completed") stats.completed += 1;
+      stats.hours += entry.hours || 0;
+      return stats;
+    },
+    { saved: 0, planning: 0, applied: 0, completed: 0, hours: 0 }
+  );
+}
+
+function getStatusWeight(status?: TrackerStatus) {
+  if (status === "completed") return 4;
+  if (status === "applied") return 3;
+  if (status === "planning") return 2;
+  if (status === "saved") return 1;
+  return 0;
+}
+
+function toOptions<T extends string>(
+  labels: Record<T, Record<Lang, string>>,
+  lang: Lang
+) {
+  return Object.entries(labels).map(([value, label]) => ({
+    value,
+    label: (label as Record<Lang, string>)[lang],
+  }));
 }
